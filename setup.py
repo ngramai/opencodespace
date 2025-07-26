@@ -10,7 +10,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="opencodespace",
-    version="0.3.1",
+    version="0.4.0",
     description="Disposable VS Code instances for YOLO mode development on claude code and gemini cli. Local or cloud.",
     long_description=long_description,
     long_description_content_type="text/markdown",
