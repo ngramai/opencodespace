@@ -1,0 +1,7 @@
+# OpenCodeSpace Requirements
+# Core dependencies for the OpenCodeSpace CLI tool
+
+toml>=0.10.2  # Configuration file parsing
+setuptools>=40.0.0  # For pkg_resources
+click>=7.0  # Modern CLI framework
+questionary>=1.8.0  # Interactive command-line prompts

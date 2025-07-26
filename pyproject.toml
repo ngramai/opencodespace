@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opencodespace"
+version = "0.3.3"
+description = "Launch disposable VS Code development environments with AI tooling support"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "ngram-ai", email = "eng@ngram.com"}
+]
+keywords = ["development", "vscode", "docker", "cloud", "devops", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "click>=8.0.0",
+    "questionary>=1.10.0",
+    "toml>=0.10.2",
+    "importlib-metadata>=4.0.0; python_version<'3.8'",
+    "importlib-resources>=5.0.0; python_version<'3.9'"
+]
+
+[project.urls]
+Homepage = "https://github.com/devadutta/opencodespace"
+"Bug Reports" = "https://github.com/devadutta/opencodespace/issues"
+"Source" = "https://github.com/devadutta/opencodespace"
+
+[project.scripts]
+opencodespace = "opencodespace.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"opencodespace" = [".opencodespace/*", ".opencodespace/**/*"] 

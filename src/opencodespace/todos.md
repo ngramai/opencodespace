@@ -1,0 +1,3 @@
+- [ ] Setup environment variables for Gemini and Claude
+- [ ] Authentication for fly
+- [ ] Test cases

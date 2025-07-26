@@ -1,0 +1,27 @@
+# Test requirements for OpenCodeSpace
+# These dependencies are needed to run the test suite
+
+-e .
+
+# Testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+
+# For testing CLI applications
+click>=7.0
+
+# For mocking and fixtures
+responses>=0.23.0
+
+# For async testing if needed
+pytest-asyncio>=0.21.0
+
+# Development dependencies that might be useful
+pytest-xdist>=3.0.0  # For parallel test execution
+pytest-html>=3.0.0   # For HTML test reports
+
+# Dependencies from main project (ensure compatibility)
+toml>=0.10.2
+setuptools>=40.0.0
+questionary>=1.8.0 
