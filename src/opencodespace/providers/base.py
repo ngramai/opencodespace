@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+import textwrap
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict
@@ -278,3 +279,262 @@ class Provider(ABC):
         self._setup_ai_api_keys(config, env_vars)
         
         return env_vars
+    
+    def _generate_dockerfile_content(self) -> str:
+        """Generate the Dockerfile content."""
+        return textwrap.dedent("""
+            FROM codercom/code-server:latest
+            
+            USER root
+            
+            # Install essential development tools
+            RUN apt-get update && apt-get install -y \\
+                git \\
+                openssh-client \\
+                curl \\
+                wget \\
+                vim \\
+                nano \\
+                build-essential \\
+                python3 \\
+                python3-pip \\
+                && rm -rf /var/lib/apt/lists/*
+            
+            # Install Node.js 24.x
+            RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \\
+                apt-get install -y nodejs && \\
+                rm -rf /var/lib/apt/lists/*
+            
+            RUN npm install -g @google/gemini-cli
+            RUN npm install -g @anthropic-ai/claude-code
+            
+                # Create workspace directory
+            RUN mkdir -p /home/coder/workspace && \\
+                chown -R coder:coder /home/coder/workspace
+            
+            # Set up SSH directory for coder user
+            RUN mkdir -p /home/coder/.ssh && \\
+                chown -R coder:coder /home/coder/.ssh && \\
+                chmod 700 /home/coder/.ssh
+            
+            # Copy entrypoint script
+            COPY .opencodespace/entrypoint.sh /usr/local/bin/entrypoint.sh
+            RUN chmod +x /usr/local/bin/entrypoint.sh
+            
+            USER coder
+            
+            # Set working directory
+            WORKDIR /home/coder/workspace
+            
+            # Environment variables
+            ENV GIT_TERMINAL_PROMPT=0
+            ENV SHELL=/bin/bash
+            
+            # Expose code-server port
+            EXPOSE 8080
+            
+            ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+        """).strip()
+    
+    def _generate_entrypoint_content(self) -> str:
+        """Generate the entrypoint.sh content."""
+        return textwrap.dedent("""
+            #!/bin/bash
+            set -e
+            
+            # Function to generate branch name
+            generate_branch_name() {
+                echo "opencodespace-$(date +%Y%m%d-%H%M%S)-$(openssl rand -hex 4)"
+            }
+            
+            # Function to setup Gemini configuration
+            setup_gemini_config() {
+                echo "Setting up Gemini configuration..."
+                
+                # Create Gemini config directory
+                mkdir -p /home/coder/.gemini
+                
+                # Create settings.json with default configuration
+                cat > /home/coder/.gemini/settings.json << 'EOF'
+            {
+              "theme": "Default",
+              "selectedAuthType": "gemini-api-key"
+            }
+            EOF
+                
+                # Set proper ownership
+                chown -R coder:coder /home/coder/.gemini/
+                
+                echo "Gemini configuration setup complete."
+            }
+            
+            # Function to setup VS Code configuration
+            setup_vscode_config() {
+                echo "Setting up VS Code configuration..."
+                
+                # Create code-server user config directory
+                mkdir -p /home/coder/.local/share/code-server/User
+                
+                # Install VS Code extensions if provided
+                if [ -n "$VSCODE_EXTENSIONS" ]; then
+                    echo "Installing VS Code extensions..."
+                    IFS=',' read -ra EXTENSIONS <<< "$VSCODE_EXTENSIONS"
+                    for extension in "${EXTENSIONS[@]}"; do
+                        if [ -n "$extension" ]; then
+                            echo "Installing VS Code extension: $extension"
+                            code-server --install-extension "$extension" || echo "Failed to install VS Code extension: $extension"
+                        fi
+                    done
+                fi
+                
+                # Install Cursor extensions if provided
+                if [ -n "$CURSOR_EXTENSIONS" ]; then
+                    echo "Installing Cursor extensions (compatible with VS Code)..."
+                    IFS=',' read -ra EXTENSIONS <<< "$CURSOR_EXTENSIONS"
+                    for extension in "${EXTENSIONS[@]}"; do
+                        if [ -n "$extension" ]; then
+                            echo "Installing Cursor extension: $extension"
+                            code-server --install-extension "$extension" || echo "Failed to install Cursor extension: $extension"
+                        fi
+                    done
+                fi
+                
+                # Copy VS Code settings if provided
+                if [ -n "$VSCODE_SETTINGS" ]; then
+                    echo "Copying VS Code settings..."
+                    echo "$VSCODE_SETTINGS" > /home/coder/.local/share/code-server/User/settings.json
+                fi
+                
+                # Copy Cursor settings if provided (merge with VS Code settings)
+                if [ -n "$CURSOR_SETTINGS" ]; then
+                    echo "Merging Cursor settings..."
+                    if [ -f /home/coder/.local/share/code-server/User/settings.json ]; then
+                        # If both settings exist, we need to merge them
+                        # For now, prioritize VS Code settings and add a comment about Cursor
+                        echo "// Note: Cursor settings were also detected but VS Code settings take precedence" >> /home/coder/.local/share/code-server/User/settings.json
+                    else
+                        # If only Cursor settings exist, use them
+                        echo "$CURSOR_SETTINGS" > /home/coder/.local/share/code-server/User/settings.json
+                    fi
+                fi
+                
+                # Set proper ownership
+                chown -R coder:coder /home/coder/.local/share/code-server/
+                
+                echo "VS Code configuration setup complete."
+            }
+            
+            # Function to setup Git
+            setup_git() {
+                if [ -n "$GIT_USER_NAME" ]; then
+                    git config --global user.name "$GIT_USER_NAME"
+                fi
+                
+                if [ -n "$GIT_USER_EMAIL" ]; then
+                    git config --global user.email "$GIT_USER_EMAIL"
+                fi
+                
+                # Configure Git to trust the workspace directory
+                git config --global --add safe.directory /home/coder/workspace
+            }
+            
+            # Function to setup SSH
+            setup_ssh() {
+                if [ -n "$SSH_PRIVATE_KEY" ]; then
+                    echo "Setting up SSH key..."
+                    echo "$SSH_PRIVATE_KEY" > /home/coder/.ssh/id_rsa
+                    chmod 600 /home/coder/.ssh/id_rsa
+                    
+                    # Start ssh-agent and add key
+                    eval "$(ssh-agent -s)"
+                    ssh-add /home/coder/.ssh/id_rsa
+                    
+                    # Add GitHub to known hosts
+                    ssh-keyscan -t rsa github.com >> /home/coder/.ssh/known_hosts 2>/dev/null
+                fi
+            }
+            
+            # Function to handle Git repository
+            handle_git_repo() {
+                # Skip git setup if explicitly disabled
+                if [ "$SKIP_GIT_SETUP" = "true" ]; then
+                    echo "Skipping Git setup (no SSH key and no folder upload)"
+                    return
+                fi
+                
+                cd /home/coder/workspace
+                
+                # Check if GIT_REPO_URL is provided
+                if [ -n "$GIT_REPO_URL" ]; then
+                    echo "Cloning repository from $GIT_REPO_URL..."
+                    git clone "$GIT_REPO_URL" .
+                    
+                    # Create new branch
+                    BRANCH_NAME=$(generate_branch_name)
+                    echo "Creating new branch: $BRANCH_NAME"
+                    git checkout -b "$BRANCH_NAME"
+                    
+                elif [ -d ".git" ]; then
+                    # Existing Git repository
+                    echo "Existing Git repository detected"
+                    
+                    # Fetch latest changes
+                    git fetch origin
+                    
+                    # Create new branch from current HEAD
+                    BRANCH_NAME=$(generate_branch_name)
+                    echo "Creating new branch: $BRANCH_NAME"
+                    git checkout -b "$BRANCH_NAME"
+                    
+                else
+                    # No Git repo, initialize new one
+                    echo "Initializing new Git repository..."
+                    git init
+                    
+                    # Create initial commit if there are files
+                    if [ "$(ls -A)" ]; then
+                        git add .
+                        git commit -m "Initial commit from OpenCodeSpace"
+                    fi
+                    
+                    # Create working branch
+                    BRANCH_NAME=$(generate_branch_name)
+                    echo "Creating new branch: $BRANCH_NAME"
+                    git checkout -b "$BRANCH_NAME"
+                fi
+                
+                echo "Git setup complete. Working on branch: $BRANCH_NAME"
+            }
+            
+            # Main execution
+            echo "Starting OpenCodeSpace environment setup..."
+            
+            # Setup SSH if key is provided
+            setup_ssh
+            
+            # Setup Git configuration (only if not skipping git setup)
+            if [ "$SKIP_GIT_SETUP" != "true" ]; then
+                setup_git
+            fi
+            
+            # Setup Gemini configuration
+            setup_gemini_config
+            
+            # Setup VS Code configuration
+            setup_vscode_config
+            
+            # Handle Git repository
+            handle_git_repo
+            
+            # Start code-server
+            echo "Starting code-server..."
+            
+            # Use password authentication if PASSWORD is set, otherwise no auth
+            if [ -n "$PASSWORD" ]; then
+                echo "Using password authentication for code-server..."
+                exec code-server --bind-addr 0.0.0.0:8080 --auth password /home/coder/workspace
+            else
+                echo "Using no authentication for code-server..."
+                exec code-server --bind-addr 0.0.0.0:8080 --auth none /home/coder/workspace
+            fi
+            """).strip()

@@ -5,11 +5,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 import tempfile
-try:
-    from importlib.resources import files, as_file
-except ImportError:
-    # Python 3.8 compatibility
-    from importlib_resources import files, as_file
 
 from .base import Provider
 
@@ -66,37 +61,35 @@ class LocalProvider(Provider):
         name = config.get('name') or 'local'
         return f"opencodespace-{name}"
     
+    
     def _build_docker_image(self, path: Path) -> str:
         """Build the Docker image from our Dockerfile."""
         # Create .opencodespace directory in project if it doesn't exist
         target_dir = path / ".opencodespace"
         target_dir.mkdir(exist_ok=True)
         
-        # Copy required files from package resources
-        files_to_copy = ["Dockerfile", "entrypoint.sh"]
-        
         logger.info(f"📁 Setting up .opencodespace directory...")
-        for filename in files_to_copy:
-            try:
-                # Load resource data using importlib.resources
-                resource_path = files('opencodespace') / '.opencodespace' / filename
-                with as_file(resource_path) as resource_file:
-                    content = resource_file.read_bytes()
-                target_file = target_dir / filename
-                
-                # Only copy if file doesn't exist or user confirms overwrite
-                if target_file.exists():
-                    logger.info(f"ℹ️  {filename} already exists in .opencodespace/")
-                else:
-                    target_file.write_bytes(content)
-                    if filename == "entrypoint.sh":
-                        target_file.chmod(0o755)
-                    logger.info(f"📄 Created .opencodespace/{filename}")
-            except Exception as e:
-                raise RuntimeError(f"Failed to copy {filename}: {e}")
+        
+        # Generate and write Dockerfile
+        dockerfile_path = target_dir / "Dockerfile"
+        if not dockerfile_path.exists():
+            dockerfile_content = self._generate_dockerfile_content()
+            dockerfile_path.write_text(dockerfile_content)
+            logger.info(f"📄 Created .opencodespace/Dockerfile")
+        else:
+            logger.info(f"ℹ️  Dockerfile already exists in .opencodespace/")
+        
+        # Generate and write entrypoint.sh
+        entrypoint_path = target_dir / "entrypoint.sh"
+        if not entrypoint_path.exists():
+            entrypoint_content = self._generate_entrypoint_content()
+            entrypoint_path.write_text(entrypoint_content)
+            entrypoint_path.chmod(0o755)
+            logger.info(f"📄 Created .opencodespace/entrypoint.sh")
+        else:
+            logger.info(f"ℹ️  entrypoint.sh already exists in .opencodespace/")
         
         logger.info(f"🔨 Building Docker image...")
-        dockerfile_path = target_dir / "Dockerfile"
         
         try:
             # Build from the project root directory

@@ -13,6 +13,8 @@ except ImportError:
     # Python 3.7 compatibility
     from importlib_metadata import version
 
+import textwrap
+
 from .base import Provider
 
 # Set up logger for fly provider
@@ -81,43 +83,73 @@ class FlyProvider(Provider):
         if len(app_name) > 30:
             raise ValueError("Application name must be 30 characters or less")
     
+    
+    def _generate_fly_toml_content(self, app_name: str) -> str:
+        """Generate the fly.toml content."""
+        return textwrap.dedent(f"""
+            app = "{app_name}"
+            primary_region = "ord"
+            
+            [build]
+              dockerfile = ".opencodespace/Dockerfile"
+            
+            [env]
+              PORT = "8080"
+            
+            [http_service]
+              internal_port = 8080
+              force_https = true
+              auto_stop_machines = true
+              auto_start_machines = true
+              min_machines_running = 0
+            
+            [[vm]]
+              cpu_kind = "shared"
+              cpus = 1
+              memory_mb = 1024
+        """).strip()
+    
     def _copy_deployment_files(self, path: Path) -> None:
         """Copy OpenCodeSpace deployment files to project directory."""
         # Create .opencodespace directory in target path
         target_dir = path / ".opencodespace"
         target_dir.mkdir(exist_ok=True)
         
-        # Copy OpenCodeSpace Docker files to project directory using pkg_resources
-        files_to_copy = ["Dockerfile", "entrypoint.sh", "fly.toml"]
+        # Generate and write Dockerfile
+        dockerfile_path = target_dir / "Dockerfile"
+        if not dockerfile_path.exists():
+            dockerfile_content = self._generate_dockerfile_content()
+            dockerfile_path.write_text(dockerfile_content)
+            logger.info(f"📄 Created .opencodespace/Dockerfile")
+        else:
+            logger.info(f"ℹ️  Dockerfile already exists in .opencodespace/")
         
-        for filename in files_to_copy:
-            try:
-                # Load resource data using importlib.resources
-                from importlib.resources import files, as_file
-                resource_path = files('opencodespace') / '.opencodespace' / filename
-                with as_file(resource_path) as resource_file:
-                    content = resource_file.read_bytes()
-                target_file = target_dir / filename
-                if filename == "entrypoint.sh":
-                    # Write as binary to preserve line endings and make executable
-                    target_file.write_bytes(content)
-                    target_file.chmod(0o755)
-                else:
-                    target_file.write_bytes(content)
-            except FileNotFoundError:
-                logger.info(f"Warning: {filename} not found in package resources")
+        # Generate and write entrypoint.sh
+        entrypoint_path = target_dir / "entrypoint.sh"
+        if not entrypoint_path.exists():
+            entrypoint_content = self._generate_entrypoint_content()
+            entrypoint_path.write_text(entrypoint_content)
+            entrypoint_path.chmod(0o755)
+            logger.info(f"📄 Created .opencodespace/entrypoint.sh")
+        else:
+            logger.info(f"ℹ️  entrypoint.sh already exists in .opencodespace/")
+        
+        # Generate and write fly.toml in .opencodespace
+        fly_toml_path = target_dir / "fly.toml"
+        if not fly_toml_path.exists():
+            fly_toml_content = self._generate_fly_toml_content(self.config.get("name", "opencodespace"))
+            fly_toml_path.write_text(fly_toml_content)
+            logger.info(f"📄 Created .opencodespace/fly.toml")
+        else:
+            logger.info(f"ℹ️  fly.toml already exists in .opencodespace/")
         
         # Copy fly.toml to root (Fly.io expects it there)
-        try:
-            # Load fly.toml template using importlib.resources
-            from importlib.resources import files, as_file
-            resource_path = files('opencodespace') / '.opencodespace' / 'fly.toml'
-            with as_file(resource_path) as resource_file:
-                fly_content = resource_file.read_bytes()
-            (path / "fly.toml").write_bytes(fly_content)
+        root_fly_toml = path / "fly.toml"
+        if not root_fly_toml.exists():
+            shutil.copy(fly_toml_path, root_fly_toml)
             logger.info(f"📄 Copied fly.toml to project root")
-        except FileNotFoundError:
-            logger.info(f"Warning: fly.toml not found in package resources")
+        else:
+            logger.info(f"ℹ️  fly.toml already exists in project root")
     
     def _set_fly_secrets(self, path: Path, env_vars: Dict[str, str]) -> None:
         """Set environment variables as Fly.io secrets."""
@@ -156,6 +188,9 @@ class FlyProvider(Provider):
         self.validate_config(config)
         
         try:
+            # Store config for use in _copy_deployment_files
+            self.config = config
+            
             # Copy deployment files
             self._copy_deployment_files(path)
             
