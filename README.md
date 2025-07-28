@@ -302,7 +302,7 @@ This project includes a comprehensive build system with multiple interfaces for 
 ### Quick Development Setup
 
 ```bash
-git clone https://github.com/devadutta/opencodespace.git
+git clone https://github.com/ngramai/opencodespace.git
 cd opencodespace
 
 # Install dependencies and package in development mode
