@@ -35,9 +35,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/devadutta/opencodespace"
-"Bug Reports" = "https://github.com/devadutta/opencodespace/issues"
-"Source" = "https://github.com/devadutta/opencodespace"
+Homepage = "https://github.com/ngramai/opencodespace"
+"Bug Reports" = "https://github.com/ngramai/opencodespace/issues"
+"Source" = "https://github.com/ngramai/opencodespace"
 
 [project.scripts]
 opencodespace = "opencodespace.main:main"
