@@ -874,7 +874,7 @@ class OpenCodeSpace:
 def cli(ctx, version, yes, list_providers):
     """Deploy disposable VS Code development environments.
     
-    For more information, visit: https://github.com/devadutta/opencodespace
+    For more information, visit: https://github.com/ngramai/opencodespace
     """
     # Ensure that ctx.obj exists and is a dict
     ctx.ensure_object(dict)
